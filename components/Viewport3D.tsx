@@ -71,6 +71,9 @@ const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ entities, la
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
     
+    // CRITICAL: Prevent default browser touch actions so OrbitControls works on mobile
+    renderer.domElement.style.touchAction = 'none';
+    
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -88,8 +91,6 @@ const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ entities, la
     const gridHelper = new THREE.GridHelper(2000, 200, 0x334155, 0x1e293b);
     scene.add(gridHelper);
     gridRef.current = gridHelper;
-    
-    // Floor removed as shadows are disabled, GridHelper is sufficient.
     
     const axesHelper = new THREE.AxesHelper(50);
     scene.add(axesHelper);
@@ -434,15 +435,30 @@ const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ entities, la
 
   }, [entities, layers]);
 
+  const resetCamera = () => {
+      if (cameraRef.current && controlsRef.current) {
+          cameraRef.current.position.set(200, 200, 200);
+          cameraRef.current.lookAt(0,0,0);
+          controlsRef.current.target.set(0,0,0);
+          controlsRef.current.update();
+      }
+  }
+
   return (
-    <div ref={containerRef} className="w-full h-full bg-slate-900 relative overflow-hidden shadow-inner">
+    <div ref={containerRef} className="w-full h-full bg-slate-900 relative overflow-hidden shadow-inner" style={{ touchAction: 'none' }}>
       <div className="absolute top-4 right-4 flex flex-col gap-2 pointer-events-none select-none z-10">
-         <div className="bg-slate-900/80 text-white text-[10px] uppercase px-3 py-1.5 rounded backdrop-blur border border-slate-700 shadow-lg tracking-wide">
+         <div className="bg-slate-900/80 text-white text-[10px] uppercase px-3 py-1.5 rounded backdrop-blur border border-slate-700 shadow-lg tracking-wide hidden md:block">
             <span className="text-blue-400 font-bold mr-1">LMB</span> Orbit
          </div>
-         <div className="bg-slate-900/80 text-white text-[10px] uppercase px-3 py-1.5 rounded backdrop-blur border border-slate-700 shadow-lg tracking-wide">
+         <div className="bg-slate-900/80 text-white text-[10px] uppercase px-3 py-1.5 rounded backdrop-blur border border-slate-700 shadow-lg tracking-wide hidden md:block">
             <span className="text-green-400 font-bold mr-1">RMB</span> Pan
          </div>
+         <button 
+            onClick={resetCamera}
+            className="md:hidden bg-slate-800/90 text-white text-xs font-bold uppercase px-3 py-2 rounded border border-slate-600 shadow pointer-events-auto active:bg-blue-600"
+         >
+             <i className="fas fa-sync-alt mr-1"></i> Reset View
+         </button>
       </div>
     </div>
   );

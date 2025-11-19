@@ -150,6 +150,9 @@ const App: React.FC = () => {
   const [projectKey, setProjectKey] = useState(0); // Used to force re-mount of Canvas on new project
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
 
+  // Mobile State
+  const [mobileTab, setMobileTab] = useState<'none' | 'tools' | 'props' | 'layers'>('none');
+
   // History Manager
   const [history, dispatch] = useReducer(historyReducer, {
     past: [],
@@ -171,6 +174,8 @@ const App: React.FC = () => {
   const handleAddEntity = (entity: Entity) => {
     const deselectedEntities = entities.map(e => ({ ...e, selected: false, isBase: false }));
     dispatch({ type: 'PUSH_STATE', payload: [...deselectedEntities, { ...entity, selected: true }] });
+    // On mobile, close drawer after picking tool and drawing
+    if (activeTool !== 'select') setMobileTab('none');
   };
 
   const handleUpdateEntities = (updatedEntities: Entity[]) => {
@@ -427,7 +432,7 @@ const App: React.FC = () => {
             {type} View | {viewState.scale.toFixed(2)}x
          </div>
          <div className="flex-1 relative">
-            {/* Key prop forces full re-mount on project reset */}
+            {/* Key prop forces full re-mount of canvas on project reset */}
             <Canvas2D 
                 key={`canvas-${projectKey}-${type}`}
                 entities={entities}
@@ -445,153 +450,301 @@ const App: React.FC = () => {
       </div>
   );
 
+  const getActiveMobileView = () => {
+      if (activeSingleView === 'front') return { view: viewFront, setView: setViewFront };
+      if (activeSingleView === 'right') return { view: viewRight, setView: setViewRight };
+      return { view: viewTop, setView: setViewTop };
+  };
+  const mobileViewProps = getActiveMobileView();
+
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
-      {/* Top Bar */}
-      <header className="h-14 bg-slate-900 border-b border-slate-800 flex items-center px-6 justify-between shrink-0 z-30 shadow-xl relative">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:20px_20px] opacity-20 pointer-events-none"></div>
-        
-        <div className="flex items-center gap-4 z-10">
-          <Logo />
-          <div>
-             <h1 className="font-bold text-slate-100 text-lg tracking-tight leading-none">
-                ThoughtlessCAD <span className="text-blue-500">Pro</span>
-             </h1>
-             <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Professional Modeling Suite</span>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-4 z-10">
-            <div className="flex gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700">
-            <button 
-                onClick={() => setViewMode('single')}
-                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-all ${viewMode === 'single' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
-            >Single</button>
-            <button 
-                onClick={() => setViewMode('quad')}
-                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-all ${viewMode === 'quad' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
-            >Quad</button>
-            </div>
-            <div className="h-6 w-px bg-slate-700"></div>
-            <input 
+      
+      {/* --- MOBILE SHELL (Visible only on small screens) --- */}
+      <div className="flex md:hidden flex-col h-full w-full">
+          {/* Mobile Header */}
+          <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 shrink-0">
+              <div className="flex items-center gap-2">
+                  <Logo />
+                  <span className="font-bold text-sm tracking-tight">TC<span className="text-blue-500">Pro</span></span>
+              </div>
+              <input 
                 type="text" 
                 value={currentProjectName} 
                 onChange={(e) => setCurrentProjectName(e.target.value)}
-                className="bg-transparent border-b border-transparent hover:border-slate-600 focus:border-blue-500 text-xs text-slate-400 font-mono outline-none w-40 text-center transition-colors"
-            />
-        </div>
-      </header>
+                className="bg-transparent border-b border-transparent focus:border-blue-500 text-xs text-slate-400 text-right w-32 outline-none"
+              />
+          </div>
 
-      {/* Main Workspace */}
-      <div className="flex-1 relative flex overflow-hidden">
-        
-        <Toolbar 
-            activeTool={activeTool} 
-            setTool={setActiveTool} 
-            undo={() => dispatch({ type: 'UNDO' })}
-            redo={() => dispatch({ type: 'REDO' })}
-            save={handleSaveFile}
-            onNewProject={handleNewProject}
-            onLoadFile={handleLoadFile}
-            canUndo={history.past.length > 0}
-            canRedo={history.future.length > 0}
-            isSaving={isSaving}
-            entities={entities}
-            onExportImage={() => viewportRef.current?.triggerScreenshot()}
-        />
-
-        <PropertiesPanel 
-            layers={layers}
-            activeLayerId={activeLayerId}
-            setActiveLayer={setActiveLayerId}
-            toggleLayerVisibility={(id) => setLayers(layers.map(l => l.id === id ? { ...l, visible: !l.visible } : l))}
-            addLayer={() => setLayers([...layers, { id: `layer-${Date.now()}`, name: 'New Layer', color: '#'+Math.floor(Math.random()*16777215).toString(16), visible: true, locked: false }])}
-            deleteLayer={handleDeleteLayer}
-            selectedEntities={selectedEntities}
-            deleteSelected={handleDeleteSelected}
-            onUpdateEntities={handleUpdateEntities}
-            addEntity={handleAddEntity}
-            performBooleanSubtract={performBooleanSubtract}
-            performBooleanUnion={performBooleanUnion}
-        />
-
-        <DraggablePanel title="Scene Settings" initialPos={{ x: window.innerWidth - 260, y: window.innerHeight - 220 }} className="w-60">
-             <div className="p-4 space-y-5">
-                 <div>
-                    <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">
-                        <span>Ambient Intensity</span>
-                        <span className="text-white">{ambientIntensity.toFixed(1)}</span>
-                    </div>
-                    <input type="range" min="0" max="3" step="0.1" className="w-full accent-blue-500 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                        value={ambientIntensity} onChange={(e) => setAmbientIntensity(parseFloat(e.target.value))} />
-                 </div>
+          {/* Mobile Split View: Top 2D, Bottom 3D */}
+          <div className="flex-1 flex flex-col relative">
+              <div className="flex-1 relative border-b border-slate-700">
+                 {renderCanvas(activeSingleView, mobileViewProps.view, mobileViewProps.setView)}
                  
-                 <div className="flex items-center justify-between">
-                     <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Show Grid</span>
-                     <button onClick={() => setShowGrid(!showGrid)} className={`w-10 h-5 rounded-full relative transition-all ${showGrid ? 'bg-blue-600' : 'bg-slate-700 border border-slate-600'}`}>
-                         <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm ${showGrid ? 'translate-x-5' : 'translate-x-0'}`}></div>
-                     </button>
+                 {/* View Type Switcher Overlay */}
+                 <div className="absolute top-2 right-2 flex gap-1 bg-slate-800/80 rounded p-1 border border-slate-700 z-10">
+                    {['top', 'front', 'right'].map((t) => (
+                        <button 
+                        key={t} 
+                        onClick={() => setActiveSingleView(t as ViewType)}
+                        className={`w-8 h-6 text-[10px] uppercase font-bold rounded ${activeSingleView === t ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
+                        >
+                        {t.charAt(0)}
+                        </button>
+                    ))}
                  </div>
-             </div>
-        </DraggablePanel>
+              </div>
+              <div className="flex-1 relative bg-black">
+                 <Viewport3D ref={viewportRef} entities={entities} layers={layers} ambientIntensity={ambientIntensity} showGrid={showGrid} />
+              </div>
+          </div>
 
-        {/* Viewport Container */}
-        <div className="flex-1 bg-black relative flex">
-            {viewMode === 'single' ? (
-                <div className="w-full h-full flex flex-row">
-                    {/* Left Side: 2D View with Tabs */}
-                    <div className="w-1/2 h-full border-r border-slate-800 flex flex-col bg-slate-900">
-                        {/* Tab Bar */}
-                        <div className="flex border-b border-slate-800 bg-slate-900">
-                             {['top', 'front', 'right'].map((t) => (
-                                 <button 
-                                    key={t} 
-                                    onClick={() => setActiveSingleView(t as ViewType)}
-                                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${activeSingleView === t ? 'border-blue-500 text-blue-400 bg-slate-800/50' : 'border-transparent text-slate-600 hover:text-slate-300 hover:bg-slate-800'}`}
-                                 >
-                                     {t}
-                                 </button>
-                             ))}
+          {/* Mobile Bottom Nav */}
+          <div className="h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around px-2 shrink-0 z-40 relative">
+              <button onClick={() => setMobileTab(mobileTab === 'tools' ? 'none' : 'tools')} className={`flex flex-col items-center gap-1 w-14 ${mobileTab === 'tools' ? 'text-blue-400' : 'text-slate-400'}`}>
+                  <i className="fas fa-tools text-lg"></i>
+                  <span className="text-[9px] uppercase font-bold">Tools</span>
+              </button>
+              <div className="flex gap-4 mx-2">
+                   <button onClick={() => dispatch({ type: 'UNDO' })} disabled={history.past.length === 0} className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 disabled:opacity-30">
+                       <i className="fas fa-undo text-sm text-slate-300"></i>
+                   </button>
+                   <button onClick={() => dispatch({ type: 'REDO' })} disabled={history.future.length === 0} className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 disabled:opacity-30">
+                       <i className="fas fa-redo text-sm text-slate-300"></i>
+                   </button>
+              </div>
+              <button onClick={() => setMobileTab(mobileTab === 'props' ? 'none' : 'props')} className={`flex flex-col items-center gap-1 w-14 ${mobileTab === 'props' ? 'text-blue-400' : 'text-slate-400'}`}>
+                  <i className="fas fa-sliders-h text-lg"></i>
+                  <span className="text-[9px] uppercase font-bold">Props</span>
+              </button>
+              <button onClick={() => setMobileTab(mobileTab === 'layers' ? 'none' : 'layers')} className={`flex flex-col items-center gap-1 w-14 ${mobileTab === 'layers' ? 'text-blue-400' : 'text-slate-400'}`}>
+                  <i className="fas fa-layer-group text-lg"></i>
+                  <span className="text-[9px] uppercase font-bold">Layers</span>
+              </button>
+          </div>
+
+          {/* Mobile Drawers */}
+          {mobileTab !== 'none' && (
+              <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-none">
+                  {/* Backdrop */}
+                  <div className="absolute inset-0 bg-black/50 pointer-events-auto" onClick={() => setMobileTab('none')}></div>
+                  
+                  {/* Drawer Content */}
+                  <div className="bg-slate-900 border-t border-slate-700 w-full max-h-[60vh] pointer-events-auto flex flex-col shadow-2xl rounded-t-2xl overflow-hidden animate-slide-up" style={{ touchAction: 'pan-y' }}>
+                      <div className="h-8 bg-slate-800 flex items-center justify-center shrink-0">
+                          <div className="w-12 h-1 bg-slate-600 rounded-full"></div>
+                      </div>
+                      <div className="p-4 overflow-y-auto">
+                          {mobileTab === 'tools' && (
+                             <Toolbar 
+                                activeTool={activeTool} 
+                                setTool={(t) => { setActiveTool(t); setMobileTab('none'); }} 
+                                undo={() => dispatch({ type: 'UNDO' })}
+                                redo={() => dispatch({ type: 'REDO' })}
+                                save={handleSaveFile}
+                                onNewProject={handleNewProject}
+                                onLoadFile={handleLoadFile}
+                                canUndo={history.past.length > 0}
+                                canRedo={history.future.length > 0}
+                                isSaving={isSaving}
+                                entities={entities}
+                                onExportImage={() => viewportRef.current?.triggerScreenshot()}
+                                mobile={true}
+                            />
+                          )}
+                          {mobileTab === 'props' && (
+                             <PropertiesPanel 
+                                layers={layers}
+                                activeLayerId={activeLayerId}
+                                setActiveLayer={setActiveLayerId}
+                                toggleLayerVisibility={(id) => setLayers(layers.map(l => l.id === id ? { ...l, visible: !l.visible } : l))}
+                                addLayer={() => setLayers([...layers, { id: `layer-${Date.now()}`, name: 'New Layer', color: '#'+Math.floor(Math.random()*16777215).toString(16), visible: true, locked: false }])}
+                                deleteLayer={handleDeleteLayer}
+                                selectedEntities={selectedEntities}
+                                deleteSelected={() => { handleDeleteSelected(); setMobileTab('none'); }}
+                                onUpdateEntities={handleUpdateEntities}
+                                addEntity={handleAddEntity}
+                                performBooleanSubtract={performBooleanSubtract}
+                                performBooleanUnion={performBooleanUnion}
+                                mobile={true}
+                                mobileMode="properties"
+                            />
+                          )}
+                           {mobileTab === 'layers' && (
+                              <div className="flex flex-col gap-2">
+                                 <div className="text-sm font-bold text-slate-400 uppercase mb-2">Layer Management</div>
+                                 <PropertiesPanel 
+                                    layers={layers}
+                                    activeLayerId={activeLayerId}
+                                    setActiveLayer={setActiveLayerId}
+                                    toggleLayerVisibility={(id) => setLayers(layers.map(l => l.id === id ? { ...l, visible: !l.visible } : l))}
+                                    addLayer={() => setLayers([...layers, { id: `layer-${Date.now()}`, name: 'New Layer', color: '#'+Math.floor(Math.random()*16777215).toString(16), visible: true, locked: false }])}
+                                    deleteLayer={handleDeleteLayer}
+                                    selectedEntities={[]}
+                                    deleteSelected={() => {}}
+                                    onUpdateEntities={() => {}}
+                                    addEntity={() => {}}
+                                    performBooleanSubtract={() => {}}
+                                    performBooleanUnion={() => {}}
+                                    mobile={true}
+                                    mobileMode="layers"
+                                />
+                              </div>
+                           )}
+                      </div>
+                  </div>
+              </div>
+          )}
+      </div>
+
+
+      {/* --- DESKTOP SHELL (Hidden on mobile) --- */}
+      <div className="hidden md:flex flex-col h-full w-full">
+          <header className="h-14 bg-slate-900 border-b border-slate-800 flex items-center px-6 justify-between shrink-0 z-30 shadow-xl relative">
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:20px_20px] opacity-20 pointer-events-none"></div>
+            
+            <div className="flex items-center gap-4 z-10">
+            <Logo />
+            <div>
+                <h1 className="font-bold text-slate-100 text-lg tracking-tight leading-none">
+                    ThoughtlessCAD <span className="text-blue-500">Pro</span>
+                </h1>
+                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Professional Modeling Suite</span>
+            </div>
+            </div>
+            
+            <div className="flex items-center gap-4 z-10">
+                <div className="flex gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700">
+                <button 
+                    onClick={() => setViewMode('single')}
+                    className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-all ${viewMode === 'single' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                >Single</button>
+                <button 
+                    onClick={() => setViewMode('quad')}
+                    className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wide rounded transition-all ${viewMode === 'quad' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                >Quad</button>
+                </div>
+                <div className="h-6 w-px bg-slate-700"></div>
+                <input 
+                    type="text" 
+                    value={currentProjectName} 
+                    onChange={(e) => setCurrentProjectName(e.target.value)}
+                    className="bg-transparent border-b border-transparent hover:border-slate-600 focus:border-blue-500 text-xs text-slate-400 font-mono outline-none w-40 text-center transition-colors"
+                />
+            </div>
+        </header>
+
+        {/* Main Workspace */}
+        <div className="flex-1 relative flex overflow-hidden">
+            
+            <Toolbar 
+                activeTool={activeTool} 
+                setTool={setActiveTool} 
+                undo={() => dispatch({ type: 'UNDO' })}
+                redo={() => dispatch({ type: 'REDO' })}
+                save={handleSaveFile}
+                onNewProject={handleNewProject}
+                onLoadFile={handleLoadFile}
+                canUndo={history.past.length > 0}
+                canRedo={history.future.length > 0}
+                isSaving={isSaving}
+                entities={entities}
+                onExportImage={() => viewportRef.current?.triggerScreenshot()}
+            />
+
+            <PropertiesPanel 
+                layers={layers}
+                activeLayerId={activeLayerId}
+                setActiveLayer={setActiveLayerId}
+                toggleLayerVisibility={(id) => setLayers(layers.map(l => l.id === id ? { ...l, visible: !l.visible } : l))}
+                addLayer={() => setLayers([...layers, { id: `layer-${Date.now()}`, name: 'New Layer', color: '#'+Math.floor(Math.random()*16777215).toString(16), visible: true, locked: false }])}
+                deleteLayer={handleDeleteLayer}
+                selectedEntities={selectedEntities}
+                deleteSelected={handleDeleteSelected}
+                onUpdateEntities={handleUpdateEntities}
+                addEntity={handleAddEntity}
+                performBooleanSubtract={performBooleanSubtract}
+                performBooleanUnion={performBooleanUnion}
+            />
+
+            <DraggablePanel title="Scene Settings" initialPos={{ x: window.innerWidth - 260, y: window.innerHeight - 220 }} className="w-60">
+                <div className="p-4 space-y-5">
+                    <div>
+                        <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">
+                            <span>Ambient Intensity</span>
+                            <span className="text-white">{ambientIntensity.toFixed(1)}</span>
                         </div>
-                        <div className="flex-1 relative">
-                            {activeSingleView === 'top' && renderCanvas('top', viewTop, setViewTop)}
-                            {activeSingleView === 'front' && renderCanvas('front', viewFront, setViewFront)}
-                            {activeSingleView === 'right' && renderCanvas('right', viewRight, setViewRight)}
-                        </div>
+                        <input type="range" min="0" max="3" step="0.1" className="w-full accent-blue-500 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                            value={ambientIntensity} onChange={(e) => setAmbientIntensity(parseFloat(e.target.value))} />
                     </div>
                     
-                    {/* Right Side: 3D View */}
-                    <div className="w-1/2 h-full relative">
-                         <Viewport3D ref={viewportRef} entities={entities} layers={layers} ambientIntensity={ambientIntensity} showGrid={showGrid} />
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Show Grid</span>
+                        <button onClick={() => setShowGrid(!showGrid)} className={`w-10 h-5 rounded-full relative transition-all ${showGrid ? 'bg-blue-600' : 'bg-slate-700 border border-slate-600'}`}>
+                            <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow-sm ${showGrid ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                        </button>
                     </div>
                 </div>
-            ) : (
-                <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-px bg-slate-800">
-                    <div className="relative bg-slate-900">
-                        {renderCanvas('top', viewTop, setViewTop)}
-                    </div>
-                    <div className="relative bg-slate-900">
-                         <Viewport3D ref={viewportRef} entities={entities} layers={layers} ambientIntensity={ambientIntensity} showGrid={showGrid} />
-                    </div>
-                    <div className="relative bg-slate-900">
-                         {renderCanvas('front', viewFront, setViewFront)}
-                    </div>
-                    <div className="relative bg-slate-900">
-                         {renderCanvas('right', viewRight, setViewRight)}
-                    </div>
-                </div>
-            )}
-        </div>
+            </DraggablePanel>
 
-        {/* MODAL */}
-        <NewProjectModal 
+            {/* Viewport Container */}
+            <div className="flex-1 bg-black relative flex">
+                {viewMode === 'single' ? (
+                    <div className="w-full h-full flex flex-row">
+                        {/* Left Side: 2D View with Tabs */}
+                        <div className="w-1/2 h-full border-r border-slate-800 flex flex-col bg-slate-900">
+                            {/* Tab Bar */}
+                            <div className="flex border-b border-slate-800 bg-slate-900">
+                                {['top', 'front', 'right'].map((t) => (
+                                    <button 
+                                        key={t} 
+                                        onClick={() => setActiveSingleView(t as ViewType)}
+                                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${activeSingleView === t ? 'border-blue-500 text-blue-400 bg-slate-800/50' : 'border-transparent text-slate-600 hover:text-slate-300 hover:bg-slate-800'}`}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex-1 relative">
+                                {activeSingleView === 'top' && renderCanvas('top', viewTop, setViewTop)}
+                                {activeSingleView === 'front' && renderCanvas('front', viewFront, setViewFront)}
+                                {activeSingleView === 'right' && renderCanvas('right', viewRight, setViewRight)}
+                            </div>
+                        </div>
+                        
+                        {/* Right Side: 3D View */}
+                        <div className="w-1/2 h-full relative">
+                            <Viewport3D ref={viewportRef} entities={entities} layers={layers} ambientIntensity={ambientIntensity} showGrid={showGrid} />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-px bg-slate-800">
+                        <div className="relative bg-slate-900">
+                            {renderCanvas('top', viewTop, setViewTop)}
+                        </div>
+                        <div className="relative bg-slate-900">
+                            <Viewport3D ref={viewportRef} entities={entities} layers={layers} ambientIntensity={ambientIntensity} showGrid={showGrid} />
+                        </div>
+                        <div className="relative bg-slate-900">
+                            {renderCanvas('front', viewFront, setViewFront)}
+                        </div>
+                        <div className="relative bg-slate-900">
+                            {renderCanvas('right', viewRight, setViewRight)}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+      </div>
+
+      {/* MODAL */}
+      <NewProjectModal 
             isOpen={showNewProjectModal} 
             onClose={() => setShowNewProjectModal(false)} 
             onConfirm={confirmNewProject}
             hasUnsavedChanges={entities.length > 0}
         />
 
-      </div>
     </div>
   );
 };

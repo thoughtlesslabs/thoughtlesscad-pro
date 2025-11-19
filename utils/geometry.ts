@@ -46,7 +46,11 @@ export const mapEntityToView = (entity: Entity, viewType: ViewType): Entity | nu
     let width = 0;
 
     if (entity.type === 'line') {
-       return { ...entity, start: { x: entity.start.x, y: yBottom }, end: { x: entity.end.x, y: yBottom } } as any;
+       // Map line to a rectangle representing its bounds in X
+       xStart = Math.min(entity.start.x, entity.end.x);
+       width = Math.abs(entity.end.x - entity.start.x);
+       // If width is 0 (perpendicular), make it selectable
+       if (width < 1) { xStart -= 2; width = 4; }
     } else if (entity.type === 'rectangle') {
        xStart = entity.start.x;
        width = entity.width;
@@ -82,7 +86,10 @@ export const mapEntityToView = (entity: Entity, viewType: ViewType): Entity | nu
     let width = 0;
 
     if (entity.type === 'line') {
-        return { ...entity, start: { x: entity.start.y, y: yBottom }, end: { x: entity.end.y, y: yBottom } } as any;
+        // Map line to rectangle representing bounds in Y
+        yStart2D = Math.min(entity.start.y, entity.end.y);
+        width = Math.abs(entity.end.y - entity.start.y);
+        if (width < 1) { yStart2D -= 2; width = 4; }
     } else if (entity.type === 'rectangle') {
        yStart2D = entity.start.y;
        width = entity.height; 

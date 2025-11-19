@@ -31,6 +31,7 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
   viewType
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null); // Wrapper for ResizeObserver
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<Point | null>(null);
   const [currentAction, setCurrentAction] = useState<string | null>(null);
@@ -43,6 +44,17 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
   const [polyPoints, setPolyPoints] = useState<Point[]>([]);
   const [clickStartPos, setClickStartPos] = useState<Point | null>(null);
   const [currentMousePos, setCurrentMousePos] = useState<Point | null>(null);
+  
+  // Mobile Gesture State
+  const [pinchStartDist, setPinchStartDist] = useState<number>(0);
+  const [pinchStartScale, setPinchStartScale] = useState<number>(1);
+  const [panStart, setPanStart] = useState<Point | null>(null);
+  const [isTwoFingerGesture, setIsTwoFingerGesture] = useState(false);
+  const [mobileMultiSelect, setMobileMultiSelect] = useState(false);
+
+  // Keep a ref to the current view to avoid dependency cycles in ResizeObserver
+  const viewRef = useRef(view);
+  useEffect(() => { viewRef.current = view; }, [view]);
 
   const getLayerColor = (layerId: string) => layers.find(l => l.id === layerId)?.color || '#fff';
   const isLayerVisible = (layerId: string) => layers.find(l => l.id === layerId)?.visible ?? true;
@@ -84,16 +96,34 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
       }
   }, [polyPoints, activeTool]);
 
+  // Robust Auto-Center using ResizeObserver
   useEffect(() => {
-      if (canvasRef.current && view.offsetX === 0 && view.offsetY === 0) {
-           const rect = canvasRef.current.getBoundingClientRect();
-           setView(prev => ({
-               ...prev,
-               offsetX: rect.width / 2,
-               offsetY: rect.height / 2
-           }));
-      }
-  }, []);
+      if (!containerRef.current || !canvasRef.current) return;
+
+      const observer = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+              const { width, height } = entry.contentRect;
+              if (width > 0 && height > 0) {
+                  // Sync canvas size
+                  canvasRef.current!.width = width;
+                  canvasRef.current!.height = height;
+
+                  // Auto-center if view is currently at origin (0,0) which implies uninitialized
+                  if (viewRef.current.offsetX === 0 && viewRef.current.offsetY === 0) {
+                      logger.log('CANVAS', `Auto-centering ${viewType} view via Observer (${width}x${height})`);
+                      setView(prev => ({
+                          ...prev,
+                          offsetX: width / 2,
+                          offsetY: height / 2
+                      }));
+                  }
+              }
+          }
+      });
+
+      observer.observe(containerRef.current);
+      return () => observer.disconnect();
+  }, [viewType, setView]); 
 
   const finishPolygon = () => {
       if (polyPoints.length < 3) return;
@@ -120,6 +150,7 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Clear background
     ctx.fillStyle = BACKGROUND_COLOR;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -318,47 +349,33 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
       animationFrameId = requestAnimationFrame(loop);
     };
     loop();
-    
-    const handleResize = () => {
-        if(canvasRef.current) {
-            canvasRef.current.width = canvasRef.current.parentElement?.clientWidth || 800;
-            canvasRef.current.height = canvasRef.current.parentElement?.clientHeight || 600;
-            if (view.offsetX === 0 && view.offsetY === 0) {
-                setView(v => ({ ...v, offsetX: canvasRef.current!.width / 2, offsetY: canvasRef.current!.height / 2 }));
-            }
-            render();
-        }
-    }
-    window.addEventListener('resize', handleResize);
-    handleResize();
     return () => {
         cancelAnimationFrame(animationFrameId);
-        window.removeEventListener('resize', handleResize);
     };
   }, [render]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
+  // Unified Handler for Mouse and Touch
+  const handlePointerDown = (clientX: number, clientY: number, button: number, shiftKey: boolean) => {
     if(canvasRef.current) canvasRef.current.focus();
     
     const rect = canvasRef.current!.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
+    const screenX = clientX - rect.left;
+    const screenY = clientY - rect.top;
     const worldPos = screenToWorld(screenX, screenY, view, viewType);
     const snappedPos = snapPoint(worldPos);
     setIsDragging(true);
-    setClickStartPos({ x: e.clientX, y: e.clientY });
+    setClickStartPos({ x: clientX, y: clientY });
 
     const effectiveTool = isSpacePanning ? 'pan' : activeTool;
 
-    if (effectiveTool === 'pan' || e.button === 1) {
+    if (effectiveTool === 'pan' || button === 1) {
       setCurrentAction('panning');
-      setDragStart({ x: e.clientX, y: e.clientY });
+      setDragStart({ x: clientX, y: clientY });
       return;
     }
 
     if (effectiveTool === 'polygon') {
-        if (e.button === 2) { 
+        if (button === 2) { 
             setPolyPoints([]); 
             logger.log('CANVAS', 'Polygon drawing cancelled');
             return;
@@ -368,7 +385,6 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
             if (distance(last, snappedPos) < 0.1) return;
         }
         setPolyPoints([...polyPoints, snappedPos]);
-        logger.log('CANVAS', `Polygon point added: ${polyPoints.length + 1}`);
         return; 
     }
     
@@ -398,7 +414,7 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
             const handles = getEntityHandles(mapped);
             for (const h of handles) {
                     const hScreen = worldToScreen(h.x, h.y, view);
-                    if (Math.abs(screenX - hScreen.x) < 8 && Math.abs(screenY - hScreen.y) < 8) {
+                    if (Math.abs(screenX - hScreen.x) < 15 && Math.abs(screenY - hScreen.y) < 15) {
                         setCurrentAction('resizing');
                         setActiveHandle({ entityId: ent.id, handle: h });
                         setDragStart(snappedPos);
@@ -415,7 +431,7 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
             const ent = entities[i];
             if (!isLayerVisible(ent.layerId)) continue;
             const mapped = mapEntityToView(ent, viewType);
-            if (mapped && isPointInEntity(worldPos, mapped, 10 / view.scale)) {
+            if (mapped && isPointInEntity(worldPos, mapped, 15 / view.scale)) {
                 hitEntity = ent;
                 break;
             }
@@ -433,7 +449,8 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
                 setPreviewEntities(pMap);
                 return;
             } else {
-                if (!e.shiftKey) {
+                const isMulti = shiftKey || mobileMultiSelect;
+                if (!isMulti) {
                     onSelectionChange([hitEntity.id]);
                     const cleared = entities.filter(en => en.isBase).map(en => ({...en, isBase: false}));
                     if(cleared.length) onEntitiesUpdate(cleared);
@@ -455,7 +472,8 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
         }
 
         if (!hitEntity) {
-            if (!e.shiftKey) onSelectionChange([]);
+            const isMulti = shiftKey || mobileMultiSelect;
+            if (!isMulti) onSelectionChange([]);
             setCurrentAction('box-select');
             setSelectionBox({ start: worldPos, end: worldPos });
             return;
@@ -488,20 +506,20 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (clientX: number, clientY: number) => {
     const rect = canvasRef.current!.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
+    const screenX = clientX - rect.left;
+    const screenY = clientY - rect.top;
     const worldPos = screenToWorld(screenX, screenY, view, viewType);
     const snappedPos = snapPoint(worldPos);
     
     setCurrentMousePos(snappedPos);
 
     if (currentAction === 'panning' && dragStart) {
-      const dx = e.clientX - dragStart.x;
-      const dy = e.clientY - dragStart.y;
+      const dx = clientX - dragStart.x;
+      const dy = clientY - dragStart.y;
       setView(v => ({ ...v, offsetX: v.offsetX + dx, offsetY: v.offsetY + dy }));
-      setDragStart({ x: e.clientX, y: e.clientY });
+      setDragStart({ x: clientX, y: clientY });
       return;
     }
 
@@ -511,7 +529,7 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
     }
 
     if (currentAction === 'moving' && dragStart && movingOrigins) {
-        if (clickStartPos && Math.abs(e.clientX - clickStartPos.x) < 3 && Math.abs(e.clientY - clickStartPos.y) < 3) {
+        if (clickStartPos && Math.abs(clientX - clickStartPos.x) < 5 && Math.abs(clientY - clickStartPos.y) < 5) {
             return;
         }
 
@@ -569,45 +587,47 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
         const ent = entities.find(e => e.id === activeHandle.entityId);
         if (!ent) return;
         
-        let newEnt: any = ent;
+        let newEnt: any = { ...ent };
         
-        if (ent.type === 'light') {
-             const light = { ...ent } as any;
+        // Extrusion resizing in Side Views
+        if (viewType === 'front' || viewType === 'right') {
+             const isTopHandle = ['tl', 'tr'].includes(activeHandle.handle.type);
+             const isBottomHandle = ['bl', 'br'].includes(activeHandle.handle.type);
              
+             // delta Y in screen space maps to delta Z (Height) in world space
+             const dY = snappedPos.y - dragStart.y;
+             const dH = -dY; // Up on screen is negative Y, but positive height
+
+             if (isTopHandle) {
+                 // Changing Extrusion Depth (Height)
+                 const baseDepth = ent.type === 'sphere' ? (ent as any).radius * 2 : (ent.extrusionDepth || 0);
+                 const newDepth = Math.max(0.1, baseDepth + dH);
+                 
+                 if (ent.type === 'sphere') newEnt.radius = newDepth / 2;
+                 else newEnt.extrusionDepth = newDepth;
+             } else if (isBottomHandle) {
+                 // Changing Elevation
+                 newEnt.elevation = (ent.elevation || 0) + dH;
+             }
+        } 
+        // Normal resizing in Top View or specific entity logic
+        else if (ent.type === 'light') {
+             const light = { ...ent } as any;
              if (activeHandle.handle.type === 'light') {
                  const dx = snappedPos.x - dragStart.x;
                  const dy = snappedPos.y - dragStart.y;
                  const delta3D = getDelta3D(dx, dy, viewType);
-
-                 if (viewType === 'top') {
-                     light.position = { x: ent.position.x + delta3D.x, y: ent.position.y + delta3D.y };
-                     if (ent.target) {
-                        light.target = { x: ent.target.x + delta3D.x, y: ent.target.y + delta3D.y };
-                     }
-                 } else {
-                     light.elevation = (ent.elevation || 0) + delta3D.z;
-                     if (viewType === 'front') {
-                         light.position = { ...light.position, x: ent.position.x + delta3D.x };
-                         if (ent.target) light.target = { ...light.target, x: ent.target.x + delta3D.x };
-                     } else if (viewType === 'right') {
-                         light.position = { ...light.position, y: ent.position.y + delta3D.y }; 
-                         if (ent.target) light.target = { ...light.target, y: ent.target.y + delta3D.y };
-                     }
+                 light.position = { x: ent.position.x + delta3D.x, y: ent.position.y + delta3D.y };
+                 if (ent.target) {
+                    light.target = { x: ent.target.x + delta3D.x, y: ent.target.y + delta3D.y };
                  }
              } 
              else if (activeHandle.handle.type === 'target') {
                  const dx = snappedPos.x - dragStart.x;
                  const dy = snappedPos.y - dragStart.y;
                  const delta3D = getDelta3D(dx, dy, viewType);
-                 
                  if (ent.target) {
-                    if (viewType === 'top') {
-                        light.target = { x: ent.target.x + delta3D.x, y: ent.target.y + delta3D.y };
-                    } else if (viewType === 'front') {
-                        light.target = { ...light.target, x: ent.target.x + delta3D.x };
-                    } else if (viewType === 'right') {
-                        light.target = { ...light.target, y: ent.target.y + delta3D.y };
-                    }
+                    light.target = { x: ent.target.x + delta3D.x, y: ent.target.y + delta3D.y };
                  }
              }
              newEnt = light;
@@ -663,19 +683,19 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
     }
   };
 
-  const handleMouseUp = (e: React.MouseEvent) => {
+  const handlePointerUp = (clientX: number, clientY: number) => {
     if (currentAction === 'moving' && clickStartPos) {
-        const dist = Math.sqrt(Math.pow(e.clientX - clickStartPos.x, 2) + Math.pow(e.clientY - clickStartPos.y, 2));
-        if (dist < 3) {
+        const dist = Math.sqrt(Math.pow(clientX - clickStartPos.x, 2) + Math.pow(clientY - clickStartPos.y, 2));
+        if (dist < 5) {
             const rect = canvasRef.current!.getBoundingClientRect();
-            const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, view, viewType);
+            const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top, view, viewType);
             
             let clickedId = null;
             for (let i = entities.length - 1; i >= 0; i--) {
                 const ent = entities[i];
                 if (!isLayerVisible(ent.layerId)) continue;
                 const mapped = mapEntityToView(ent, viewType);
-                if (mapped && isPointInEntity(worldPos, mapped, 10 / view.scale)) {
+                if (mapped && isPointInEntity(worldPos, mapped, 15 / view.scale)) {
                     clickedId = ent.id;
                     break;
                 }
@@ -743,6 +763,103 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
     setPreviewEntities(new Map());
     setClickStartPos(null);
   };
+
+  // React Event Handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+      e.preventDefault();
+      handlePointerDown(e.clientX, e.clientY, e.button, e.shiftKey);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+      handlePointerMove(e.clientX, e.clientY);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+      handlePointerUp(e.clientX, e.clientY);
+  };
+
+  // Touch Handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+      if (e.touches.length === 2) {
+          // Two-finger gesture: Pan or Zoom
+          setIsTwoFingerGesture(true);
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          
+          const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+          setPinchStartDist(dist);
+          setPinchStartScale(view.scale);
+          
+          const midX = (t1.clientX + t2.clientX) / 2;
+          const midY = (t1.clientY + t2.clientY) / 2;
+          setPanStart({ x: midX, y: midY });
+          
+          // Cancel any current single-finger action
+          setIsDragging(false);
+          setCurrentAction(null);
+          setTempEntity(null);
+          return;
+      }
+
+      if (e.touches.length === 1) {
+          const t = e.touches[0];
+          handlePointerDown(t.clientX, t.clientY, 0, mobileMultiSelect);
+      }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+      if (isTwoFingerGesture && e.touches.length === 2) {
+          e.preventDefault();
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+
+          // 1. Handle Zoom (Pinch)
+          const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+          if (pinchStartDist > 0) {
+              const scaleMultiplier = dist / pinchStartDist;
+              const newScale = Math.max(0.1, Math.min(50, pinchStartScale * scaleMultiplier));
+              
+              // Center of pinch
+              const midX = (t1.clientX + t2.clientX) / 2;
+              const midY = (t1.clientY + t2.clientY) / 2;
+              
+              // Pan Logic
+              if (panStart) {
+                  const dx = midX - panStart.x;
+                  const dy = midY - panStart.y;
+                  
+                  // Simple Pan + Scale update
+                  setView(v => ({
+                      ...v,
+                      scale: newScale,
+                      offsetX: v.offsetX + dx,
+                      offsetY: v.offsetY + dy
+                  }));
+                  
+                  setPanStart({ x: midX, y: midY });
+              }
+          }
+          return;
+      }
+
+      if (e.touches.length === 1) {
+          e.preventDefault(); // Stop scrolling
+          const t = e.touches[0];
+          handlePointerMove(t.clientX, t.clientY);
+      }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+      if (isTwoFingerGesture && e.touches.length < 2) {
+          setIsTwoFingerGesture(false);
+          setPanStart(null);
+          return;
+      }
+      
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      handlePointerUp(t.clientX, t.clientY);
+  };
   
   const handleDoubleClick = (e: React.MouseEvent) => {
       if (activeTool === 'polygon') {
@@ -798,17 +915,53 @@ const Canvas2D: React.FC<Canvas2DProps> = ({
   }
 
   return (
-    <canvas
-      ref={canvasRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onDoubleClick={handleDoubleClick}
-      onWheel={handleWheel}
-      className="block w-full h-full touch-none outline-none bg-slate-900"
-      style={{ cursor: getCursor() }}
-    />
+    <div ref={containerRef} className="relative w-full h-full">
+        <canvas
+            ref={canvasRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onDoubleClick={handleDoubleClick}
+            onWheel={handleWheel}
+            className="block w-full h-full touch-none outline-none bg-slate-900"
+            style={{ cursor: getCursor() }}
+        />
+        
+        {/* Mobile Context Helpers */}
+        <div className="absolute bottom-4 right-4 flex flex-col gap-3 pointer-events-none md:hidden z-50">
+            {activeTool === 'select' && (
+                <button 
+                    className={`w-12 h-12 rounded-full border shadow-lg pointer-events-auto flex items-center justify-center transition-colors ${mobileMultiSelect ? 'bg-blue-600 text-white border-blue-400' : 'bg-slate-800/90 text-slate-300 border-slate-600'}`}
+                    onTouchStart={(e) => { e.stopPropagation(); setMobileMultiSelect(!mobileMultiSelect); }}
+                    title="Multi-Select"
+                >
+                    <i className="fas fa-check-double text-lg"></i>
+                </button>
+            )}
+            
+            {activeTool === 'polygon' && polyPoints.length > 0 && (
+                <>
+                    <button 
+                        className="w-12 h-12 rounded-full bg-red-900/90 text-white border border-red-700 shadow-lg pointer-events-auto flex items-center justify-center active:bg-red-700"
+                        onTouchStart={(e) => { e.stopPropagation(); setPolyPoints([]); }}
+                    >
+                        <i className="fas fa-times text-lg"></i>
+                    </button>
+                    <button 
+                        className="w-12 h-12 rounded-full bg-green-600/90 text-white border border-green-500 shadow-lg pointer-events-auto flex items-center justify-center active:bg-green-500"
+                        onTouchStart={(e) => { e.stopPropagation(); finishPolygon(); }}
+                        disabled={polyPoints.length < 3}
+                    >
+                        <i className="fas fa-check text-lg"></i>
+                    </button>
+                </>
+            )}
+        </div>
+    </div>
   );
 };
 

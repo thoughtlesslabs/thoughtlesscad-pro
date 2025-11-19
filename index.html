@@ -1,8 +1,9 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>ThoughtlessCAD Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -26,6 +27,14 @@
         overflow: hidden; /* Prevent pull-to-refresh on mobile */
         background-color: #0f172a;
         color: white;
+        touch-action: none;
+      }
+      @keyframes slide-up {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+      }
+      .animate-slide-up {
+          animation: slide-up 0.2s ease-out;
       }
     </style>
   <script type="importmap">
