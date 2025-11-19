@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ToolType } from '../types';
-import { exportToObj } from '../utils/exporter';
+import { exportToObj, exportToStl } from '../utils/exporter';
 import { Entity } from '../types';
 import DraggablePanel from './DraggablePanel';
 import { logger } from '../utils/debug';
@@ -40,6 +40,11 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
   const handleExportObj = (selectedOnly: boolean) => {
       exportToObj(entities, selectedOnly);
+      setShowExportMenu(false);
+  };
+
+  const handleExportStl = (selectedOnly: boolean) => {
+      exportToStl(entities, selectedOnly);
       setShowExportMenu(false);
   };
 
@@ -135,12 +140,21 @@ const Toolbar: React.FC<ToolbarProps> = ({
                 />
                 {showExportMenu && (
                     <div className="absolute left-full bottom-0 ml-2 w-40 bg-slate-800 border border-slate-600 rounded shadow-2xl z-50 p-1">
-                        <div className="text-[9px] font-bold text-slate-500 px-2 py-1 uppercase tracking-wider">3D Model</div>
+                        <div className="text-[9px] font-bold text-slate-500 px-2 py-1 uppercase tracking-wider">OBJ Format</div>
                         <button onClick={() => handleExportObj(false)} className="block w-full text-left px-3 py-2 text-[10px] text-slate-200 hover:bg-blue-600 rounded transition-colors">
                             <i className="fas fa-cube mr-2 text-slate-400"></i> All Objects (.obj)
                         </button>
                         <button onClick={() => handleExportObj(true)} className="block w-full text-left px-3 py-2 text-[10px] text-slate-200 hover:bg-blue-600 rounded transition-colors">
                             <i className="fas fa-cubes mr-2 text-slate-400"></i> Selected (.obj)
+                        </button>
+
+                        <div className="h-px bg-slate-700 my-1"></div>
+                        <div className="text-[9px] font-bold text-slate-500 px-2 py-1 uppercase tracking-wider">STL Format</div>
+                        <button onClick={() => handleExportStl(false)} className="block w-full text-left px-3 py-2 text-[10px] text-slate-200 hover:bg-blue-600 rounded transition-colors">
+                            <i className="fas fa-cube mr-2 text-slate-400"></i> All Objects (.stl)
+                        </button>
+                        <button onClick={() => handleExportStl(true)} className="block w-full text-left px-3 py-2 text-[10px] text-slate-200 hover:bg-blue-600 rounded transition-colors">
+                            <i className="fas fa-cubes mr-2 text-slate-400"></i> Selected (.stl)
                         </button>
                         
                         <div className="h-px bg-slate-700 my-1"></div>
@@ -160,4 +174,3 @@ const Toolbar: React.FC<ToolbarProps> = ({
 };
 
 export default Toolbar;
-    
