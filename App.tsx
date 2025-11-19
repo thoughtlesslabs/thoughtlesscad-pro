@@ -458,7 +458,7 @@ const App: React.FC = () => {
   const mobileViewProps = getActiveMobileView();
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-[100dvh] w-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
       
       {/* --- MOBILE SHELL (Visible only on small screens) --- */}
       <div className="flex md:hidden flex-col h-full w-full">
@@ -500,7 +500,7 @@ const App: React.FC = () => {
           </div>
 
           {/* Mobile Bottom Nav */}
-          <div className="h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around px-2 shrink-0 z-40 relative">
+          <div className="bg-slate-900 border-t border-slate-800 flex items-center justify-around px-2 shrink-0 z-40 relative py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
               <button onClick={() => setMobileTab(mobileTab === 'tools' ? 'none' : 'tools')} className={`flex flex-col items-center gap-1 w-14 ${mobileTab === 'tools' ? 'text-blue-400' : 'text-slate-400'}`}>
                   <i className="fas fa-tools text-lg"></i>
                   <span className="text-[9px] uppercase font-bold">Tools</span>
@@ -534,7 +534,7 @@ const App: React.FC = () => {
                       <div className="h-8 bg-slate-800 flex items-center justify-center shrink-0">
                           <div className="w-12 h-1 bg-slate-600 rounded-full"></div>
                       </div>
-                      <div className="p-4 overflow-y-auto">
+                      <div className="p-4 overflow-y-auto pb-8">
                           {mobileTab === 'tools' && (
                              <Toolbar 
                                 activeTool={activeTool} 
