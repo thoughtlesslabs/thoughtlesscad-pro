@@ -1,0 +1,5 @@
+{
+  "name": "ThoughtlessCAD Pro",
+  "description": "A professional web-based CAD application featuring 2D drafting with layers, snapping, and undo/redo, integrated with real-time 3D extrusion viewing.",
+  "requestFramePermissions": []
+}
