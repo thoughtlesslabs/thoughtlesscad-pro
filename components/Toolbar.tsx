@@ -192,6 +192,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
             </div>
         </div>
 
+        <div className="h-px w-full bg-slate-700 my-1 relative z-10"></div>
+        
+        <a href="https://buy.stripe.com/28E3cwcQsbEK8ShfAtbsc03" target="_blank" rel="noopener noreferrer" className="w-full h-8 bg-pink-900/30 border border-pink-700/50 rounded flex flex-row items-center justify-center gap-2 transition-colors hover:bg-pink-900/50 hover:border-pink-600 relative z-10">
+             <i className="fas fa-heart text-pink-500 text-xs"></i>
+             <span className="text-[9px] font-bold uppercase text-pink-300">Donate</span>
+        </a>
+
         <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileChange} />
       </div>
   );

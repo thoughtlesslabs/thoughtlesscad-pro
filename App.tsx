@@ -591,10 +591,13 @@ const App: React.FC = () => {
                                 />
                               </div>
                            )}
-                      </div>
-                  </div>
-              </div>
-          )}
+                           <div className="mt-8 border-t border-slate-700 pt-4 flex justify-center pb-4 shrink-0">
+                               <a href="https://x.com/thoughtlesslabs" target="_blank" rel="noopener noreferrer" className="text-[10px] text-slate-500 hover:text-blue-400 uppercase tracking-widest font-semibold flex items-center gap-2 transition-colors"><span className="opacity-50">Created by:</span> <span>Thoughtless Labs</span><i className="fas fa-external-link-alt"></i></a>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+           )}
       </div>
 
 
@@ -609,7 +612,14 @@ const App: React.FC = () => {
                 <h1 className="font-bold text-slate-100 text-lg tracking-tight leading-none">
                     ThoughtlessCAD <span className="text-blue-500">Pro</span>
                 </h1>
-                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Professional Modeling Suite</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold hidden xl:inline">Professional Modeling Suite</span>
+                    <span className="text-[10px] text-slate-700 hidden xl:inline">•</span>
+                    <a href="https://x.com/thoughtlesslabs" target="_blank" rel="noopener noreferrer" className="text-[10px] text-slate-500 hover:text-blue-400 transition-colors uppercase tracking-widest font-semibold flex items-center gap-1">
+                        <span className="opacity-70">Created by:</span> 
+                        <span>Thoughtless Labs</span>
+                    </a>
+                </div>
             </div>
             </div>
             

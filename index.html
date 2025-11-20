@@ -28,6 +28,18 @@
         background-color: #0f172a;
         color: white;
         touch-action: none;
+        /* Disable text selection globally for app-like feel */
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+      /* Re-enable selection for inputs and textareas */
+      input, textarea, [contenteditable] {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
       }
       @keyframes slide-up {
           from { transform: translateY(100%); }
