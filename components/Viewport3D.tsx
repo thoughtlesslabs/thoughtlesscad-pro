@@ -35,12 +35,43 @@ const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ entities, la
           try {
             if (rendererRef.current && sceneRef.current && cameraRef.current) {
                 rendererRef.current.render(sceneRef.current, cameraRef.current);
-                const dataURL = rendererRef.current.domElement.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.download = `ThoughtlessCAD-Snapshot-${Date.now()}.png`;
-                link.href = dataURL;
-                link.click();
-                logger.log('VIEWPORT', 'Screenshot captured successfully');
+                const srcCanvas = rendererRef.current.domElement;
+                
+                // Create a temporary canvas to add watermark
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = srcCanvas.width;
+                tempCanvas.height = srcCanvas.height;
+                const ctx = tempCanvas.getContext('2d');
+                
+                if (ctx) {
+                    // Draw 3D render
+                    ctx.drawImage(srcCanvas, 0, 0);
+                    
+                    // Draw Watermark
+                    ctx.save();
+                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                    ctx.shadowBlur = 4;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    
+                    ctx.font = 'bold 24px sans-serif';
+                    ctx.textAlign = 'right';
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fillText('ThoughtlessCAD Pro', tempCanvas.width - 20, tempCanvas.height - 45);
+                    
+                    ctx.font = '16px sans-serif';
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                    ctx.fillText('Created by Thoughtless Labs', tempCanvas.width - 20, tempCanvas.height - 20);
+                    
+                    ctx.restore();
+
+                    const dataURL = tempCanvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.download = `ThoughtlessCAD-Snapshot-${Date.now()}.png`;
+                    link.href = dataURL;
+                    link.click();
+                    logger.log('VIEWPORT', 'Screenshot captured successfully');
+                }
             }
           } catch(e: any) {
               logger.error('VIEWPORT', 'Screenshot failed', e.message);
